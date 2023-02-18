@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Button,
@@ -10,78 +10,169 @@ import {
   Stack,
   Text
 } from '@mantine/core';
+import { showNotification } from '@mantine/notifications';
 import axios from 'axios';
+
+type SelectedAPI = 'every' | 'face' | 'present';
+
+type Cords = {
+  x: number;
+  y: number;
+};
+
+type PresentIDResponse = {
+  data: {
+    rectangle: {
+      lb: Cords;
+      lt: Cords;
+      rb: Cords;
+      rt: Cords;
+    };
+  }[];
+};
+
+type FaceResponse = {
+  faces: {
+    face_rectangle: {
+      x: number;
+      y: number;
+      top: number;
+      height: number;
+    };
+  }[];
+};
+
+type EveryPixelResponse = {
+  faces: {
+    bbox: number[];
+  }[];
+};
 
 const selectData: SelectItem[] = [
   {
-    label: 'Every Pixel Api',
+    label: 'Every Pixel Api'.toUpperCase(),
     value: 'every'
   },
   {
-    label: 'Face Plus Plus Api',
+    label: 'Face Plus Plus Api'.toUpperCase(),
     value: 'face'
   },
   {
-    label: 'Present Id Api',
+    label: 'Present Id Api'.toUpperCase(),
     value: 'present'
   }
 ];
 
-const Service = {
-  async getFaceApi(image: File) {
-    const postData = {
-      image_file: image,
-      api_key: import.meta.env.VITE_FACE_API_KEY,
-      api_secret: import.meta.env.VITE_FACE_API_SECRET
-    };
+const Service = (selectedAPI: SelectedAPI) => {
+  switch (selectedAPI) {
+    case 'every': {
+      return async (image: File) => {
+        const postData = new FormData();
+        postData.append('data', image);
 
-    console.log(postData);
+        const { data } = await axios.post<EveryPixelResponse>(
+          `${import.meta.env.VITE_EVERY_PIXEL_API_URL}`,
+          postData,
+          {
+            headers: {
+              Authorization: `Basic ${btoa(
+                `${import.meta.env.VITE_EVERY_PIXEL_API_KEY}:${
+                  import.meta.env.VITE_EVERY_PIXEL_API_SECRET
+                }`
+              )}`
+            }
+          }
+        );
 
-    const { data } = await axios.post(
-      `${import.meta.env.VITE_FACE_API_URL}`,
-      postData
-    );
+        return data;
+      };
+    }
+    case 'face': {
+      return async (image: File) => {
+        const postData = new FormData();
+        postData.append('image_file', image);
+        postData.append('api_key', import.meta.env.VITE_FACE_API_KEY);
+        postData.append('api_secret', import.meta.env.VITE_FACE_API_SECRET);
 
-    console.log(data);
-  },
-  async getPresentIdApi(image: File) {
-    const postData = new FormData();
-    postData.append('photo', image);
+        const { data } = await axios.post<FaceResponse>(
+          `${import.meta.env.VITE_FACE_API_URL}`,
+          postData
+        );
 
-    const { data } = await axios.post(
-      `${import.meta.env.VITE_PRESENT_ID_API_URL}`,
-      postData,
-      {
-        headers: {
-          'X-RapidAPI-Key': import.meta.env.VITE_PRESENT_ID_API_KEY,
-          'X-RapidAPI-Host': import.meta.env.VITE_PRESENT_ID_API_HOST
-        }
-      }
-    );
+        return data;
+      };
+    }
+    case 'present': {
+      return async (image: File) => {
+        const postData = new FormData();
+        postData.append('photo', image);
 
-    console.log(data);
-    return data;
-  },
-  async getEveryPixelApi(image: File) {
-    const postData = new FormData();
-    postData.append('photo', image);
+        const { data } = await axios.post<PresentIDResponse>(
+          `${import.meta.env.VITE_PRESENT_ID_API_URL}`,
+          postData,
+          {
+            headers: {
+              'X-RapidAPI-Key': import.meta.env.VITE_PRESENT_ID_API_KEY,
+              'X-RapidAPI-Host': import.meta.env.VITE_PRESENT_ID_API_HOST
+            }
+          }
+        );
 
-    const { data } = await axios.post(
-      `${import.meta.env.VITE_EVERY_PIXEL_API_URL}`,
-      postData,
-      {
-        headers: {
-          Authorization: `Basic ${btoa(
-            `${import.meta.env.VITE_EVERY_PIXEL_API_KEY}:${
-              import.meta.env.VITE_EVERY_PIXEL_API_SECRET
-            }`
-          )}`
-        }
-      }
-    );
+        return data;
+      };
+    }
+  }
+};
 
-    // console.log(data);
-    return data;
+const FRAME_STYLE = {
+  width: 0,
+  height: 0,
+  left: 0,
+  top: 0
+};
+
+const getCordsByAPI = (selectedAPI: SelectedAPI) => {
+  switch (selectedAPI) {
+    case 'every': {
+      return (response: EveryPixelResponse) => {
+        const face = response.faces[0];
+        const coords = face.bbox;
+        const width = coords[2] - coords[0];
+        const height = coords[3] - coords[1];
+        return { left: coords[0], top: coords[1], width, height };
+      };
+    }
+    case 'face': {
+      return (response: FaceResponse) => {
+        return response.faces[0].face_rectangle;
+      };
+    }
+    case 'present': {
+      return (response: PresentIDResponse) => {
+        if (!response.data) return FRAME_STYLE;
+        const faces = response.data.map(face => {
+          const coords = [
+            face.rectangle.lb,
+            face.rectangle.lt,
+            face.rectangle.rb,
+            face.rectangle.rt
+          ];
+          const x_coords = coords.map(coord => coord.x);
+          const y_coords = coords.map(coord => coord.y);
+          const left = Math.min(...x_coords);
+          const right = Math.max(...x_coords);
+          const top = Math.min(...y_coords);
+          const bottom = Math.max(...y_coords);
+          const width = right - left;
+          const height = bottom - top;
+
+          return { left, top, width, height };
+        });
+        return faces[0];
+      };
+    }
+    default:
+      return () => FRAME_STYLE;
   }
 };
 
@@ -99,23 +190,16 @@ const getImageSrc = (file: File | null) => {
   });
 };
 
-const FRAME_STYLE = {
-  width: 0,
-  height: 0,
-  left: 0,
-  top: 0
-};
-
 export const App = () => {
-  const [api, setApi] = useState('present');
+  const selectedAPI = useRef<SelectedAPI>('every');
 
   const [file, setFile] = useState<File | null>(null);
   const [src, setSrc] = useState<string>('');
 
-  const [style, setStyle] = useState(() => FRAME_STYLE);
+  const [frameStyle, setFrameStyle] = useState(() => FRAME_STYLE);
 
   useEffect(() => {
-    setStyle(FRAME_STYLE);
+    setFrameStyle(FRAME_STYLE);
   }, [src]);
 
   return (
@@ -123,19 +207,23 @@ export const App = () => {
       <Flex align='center' gap='md' justify='center' m='md'>
         <Text component='h1'>Детекция лиц с помощью сервиса</Text>
         <Select
-          defaultValue='present'
+          defaultValue={selectedAPI.current}
           data={selectData}
-          onChange={selected => setApi(selected!)}
+          onChange={selected => {
+            selectedAPI.current = selected as SelectedAPI;
+          }}
         />
       </Flex>
       <Flex justify='center'>
         <FileInput
-          onChange={async file => {
-            console.log(file);
+          onChange={async changeFile => {
+            if (!changeFile) {
+              return;
+            }
 
-            const src = await getImageSrc(file!);
-            setSrc(src);
-            setFile(file);
+            const src = await getImageSrc(changeFile);
+            src && setSrc(src);
+            setFile(changeFile);
           }}
           w='20rem'
           placeholder='Добавьте файл png, jpg'
@@ -146,47 +234,43 @@ export const App = () => {
         <Button
           onClick={async () => {
             if (!file) {
+              showNotification({
+                title: 'Ошибка отправки',
+                message: 'Файла не найдено!'
+              });
               return;
             }
-
-            const response = await Service.getPresentIdApi(file);
-            setStyle({ left: 0, top: 0, width: 0, height: 0 });
-
-            if (!response.data) return [];
-            const faces = response.data.map(face => {
-              const coords = [
-                face.rectangle.lb,
-                face.rectangle.lt,
-                face.rectangle.rb,
-                face.rectangle.rt
-              ];
-              const x_coords = coords.map(coord => coord.x);
-              const y_coords = coords.map(coord => coord.y);
-              const left = Math.min(...x_coords);
-              const right = Math.max(...x_coords);
-              const top = Math.min(...y_coords);
-              const bottom = Math.max(...y_coords);
-              const width = right - left;
-              const height = bottom - top;
-              setStyle({ left, top, width, height });
-
-              return { left, top, width, height };
-            });
+            frameStyle.height && setFrameStyle(FRAME_STYLE);
+            const response = await Service(selectedAPI.current)?.(file);
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            const cords = getCordsByAPI(selectedAPI.current)(response);
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            setFrameStyle(cords);
           }}
         >
           Отправить
         </Button>
       </Flex>
-
-      <Flex pos='relative' className='mx-auto'>
-        <Image src={src} />
-        {!!style.height && (
-          <div
-            className='absolute border-2 border-solid border-[#24fc03]'
-            style={style}
-          />
-        )}
-      </Flex>
+      <Stack>
+        <Text>Исходное изображение:</Text>
+        <Flex className='mx-auto'>
+          <Image src={src} />
+        </Flex>
+      </Stack>
+      {!!frameStyle.height && (
+        <Stack>
+          <Text>Результат:</Text>
+          <Flex pos='relative' className='mx-auto'>
+            <Image src={src} />
+            <div
+              className='absolute border-2 border-solid border-[#24fc03]'
+              style={frameStyle}
+            />
+          </Flex>
+        </Stack>
+      )}
     </Stack>
   );
 };
