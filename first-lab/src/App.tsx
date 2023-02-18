@@ -253,12 +253,14 @@ export const App = () => {
           Отправить
         </Button>
       </Flex>
-      <Stack>
-        <Text>Исходное изображение:</Text>
-        <Flex className='mx-auto'>
-          <Image src={src} />
-        </Flex>
-      </Stack>
+      {src && (
+        <Stack>
+          <Text>Исходное изображение:</Text>
+          <Flex className='mx-auto'>
+            <Image src={src} />
+          </Flex>
+        </Stack>
+      )}
       {!!frameStyle.height && (
         <Stack>
           <Text>Результат:</Text>
