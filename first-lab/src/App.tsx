@@ -241,13 +241,21 @@ export const App = () => {
               return;
             }
             frameStyle.height && setFrameStyle(FRAME_STYLE);
-            const response = await Service(selectedAPI.current)?.(file);
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            const cords = getCordsByAPI(selectedAPI.current)(response);
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            setFrameStyle(cords);
+
+            try {
+              const response = await Service(selectedAPI.current)?.(file);
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore
+              const cords = getCordsByAPI(selectedAPI.current)(response);
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore
+              setFrameStyle(cords);
+            } catch (e) {
+              showNotification({
+                title: 'Ошибка отправки',
+                message: (e as Error)?.message
+              });
+            }
           }}
         >
           Отправить
