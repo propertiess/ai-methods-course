@@ -203,7 +203,7 @@ export const App = () => {
   }, [src]);
 
   return (
-    <Stack p='md'>
+    <Stack p='md' w={500} className='mx-auto'>
       <Flex align='center' gap='md' justify='center' m='md'>
         <Text component='h1'>Детекция лиц с помощью сервиса</Text>
         <Select
@@ -225,7 +225,7 @@ export const App = () => {
             src && setSrc(src);
             setFile(changeFile);
           }}
-          w='20rem'
+          w='100%'
           placeholder='Добавьте файл png, jpg'
           accept='.png,.jpeg,.jpg'
         />
@@ -265,7 +265,7 @@ export const App = () => {
         <Stack>
           <Text>Исходное изображение:</Text>
           <Flex className='mx-auto'>
-            <Image src={src} />
+            <Image src={src} alt='initial' />
           </Flex>
         </Stack>
       )}
@@ -273,7 +273,7 @@ export const App = () => {
         <Stack>
           <Text>Результат:</Text>
           <Flex pos='relative' className='mx-auto'>
-            <Image src={src} />
+            <img src={src} alt='result' />
             <div
               className='absolute border-2 border-solid border-[#24fc03]'
               style={frameStyle}
