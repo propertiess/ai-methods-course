@@ -135,16 +135,19 @@ const getCordsByAPI = (selectedAPI: SelectedAPI) => {
   switch (selectedAPI) {
     case 'every': {
       return (response: EveryPixelResponse) => {
-        const face = response.faces[0];
-        const coords = face.bbox;
-        const width = coords[2] - coords[0];
-        const height = coords[3] - coords[1];
-        return { left: coords[0], top: coords[1], width, height };
+        const cords = response.faces.map(face => {
+          const box = face.bbox;
+          const width = box[2] - box[0];
+          const height = box[3] - box[1];
+          return { left: box[0], top: box[1], width, height };
+        });
+
+        return cords;
       };
     }
     case 'face': {
       return (response: FaceResponse) => {
-        return response.faces[0].face_rectangle;
+        return response.faces.map(face => face.face_rectangle);
       };
     }
     case 'present': {
@@ -168,11 +171,11 @@ const getCordsByAPI = (selectedAPI: SelectedAPI) => {
 
           return { left, top, width, height };
         });
-        return faces[0];
+        return faces;
       };
     }
     default:
-      return () => FRAME_STYLE;
+      return () => [];
   }
 };
 
@@ -196,10 +199,12 @@ export const App = () => {
   const [file, setFile] = useState<File | null>(null);
   const [src, setSrc] = useState<string>('');
 
-  const [frameStyle, setFrameStyle] = useState(() => FRAME_STYLE);
+  const [frameStyles, setFrameStyles] = useState<(typeof FRAME_STYLE)[]>(
+    () => []
+  );
 
   useEffect(() => {
-    setFrameStyle(FRAME_STYLE);
+    setFrameStyles([]);
   }, [src]);
 
   return (
@@ -240,7 +245,7 @@ export const App = () => {
               });
               return;
             }
-            frameStyle.height && setFrameStyle(FRAME_STYLE);
+            frameStyles.length && setFrameStyles([]);
 
             try {
               const response = await Service(selectedAPI.current)?.(file);
@@ -249,7 +254,7 @@ export const App = () => {
               const cords = getCordsByAPI(selectedAPI.current)(response);
               // eslint-disable-next-line @typescript-eslint/ban-ts-comment
               // @ts-ignore
-              setFrameStyle(cords);
+              setFrameStyles(cords);
             } catch (e) {
               showNotification({
                 title: 'Ошибка отправки',
@@ -269,15 +274,18 @@ export const App = () => {
           </Flex>
         </Stack>
       )}
-      {!!frameStyle.height && (
+      {!!frameStyles.length && (
         <Stack>
           <Text>Результат:</Text>
           <Flex pos='relative' className='mx-auto'>
             <img src={src} alt='result' />
-            <div
-              className='absolute border-2 border-solid border-[#24fc03]'
-              style={frameStyle}
-            />
+            {frameStyles.map((style, i) => (
+              <div
+                key={i}
+                className='absolute border-2 border-solid border-[#24fc03]'
+                style={style}
+              />
+            ))}
           </Flex>
         </Stack>
       )}
